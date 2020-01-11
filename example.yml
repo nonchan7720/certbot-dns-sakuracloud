@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: certbot-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: certbot-admin-crb
+subjects:
+  - kind: ServiceAccount
+    namespace: certbot-system
+    name: certbot-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin-cr
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: certbot-secret
+  namespace: certbot-system
+data:
+  SAKURACLOUD_ACCESS_TOKEN: ACCESS_TOKEN
+  SAKURACLOUD_ACCESS_TOKEN_SECRET: ACCESS_TOKEN_SECRET
+  EMAIL: EMAIL
+type: Opaque
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: CertBot
+  namespace: certbot-system
+spec:
+  serviceAccountName: certbot-admin
+  # minite hour day month Day of the week
+  schedule: "* * 7 * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          volumes:
+            - name: cert-data
+              hostPath:
+                path: /kubernetes/certbot-system/letsecrypt
+          containers:
+            - name: certbot
+              image: ncsnozominishinohara/certbot-dns-sakuracloud:1.0.0
+              restartPolicy: Never
+              volumeMounts:
+                - name: cert-data
+                  mountPath: /etc/letsencrypt
+                  subPath: letsencrypt
+              env:
+                - name: DOMAIN_NS_DPS
+                  value: example.com:default:nginx
+                - name: SLEEP_TIME
+                  value: "120"
+                - name: K8S_CM
+                  value: "Y"
+                - name: DEBUG
+                  value: "N"
+                - name: CERTBOT_ARGS
+                  value:
+                - name: SAKURACLOUD_ACCESS_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: certbot-secret
+                      key: SAKURACLOUD_ACCESS_TOKEN
+                - name: SAKURACLOUD_ACCESS_TOKEN_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: certbot-secret
+                      key: SAKURACLOUD_ACCESS_TOKEN_SECRET
+                - name: EMAIL
+                  valueFrom:
+                    secretKeyRef:
+                      name: certbot-secret
+                      key: EMAIL
